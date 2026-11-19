@@ -1,0 +1,185 @@
+{
+  "wersja": 1,
+  "zadania": [
+    {
+      "id": 1,
+      "tytul": "Kolokwium z sieci komputerowych",
+      "opis": "Rozdziały 3–5",
+      "termin": "2026-11-18",
+      "priorytet": "wysoki",
+      "wykonane": false,
+      "tagi": ["studia"]
+    },
+    {
+      "id": 2,
+      "tytul": "Oddać sprawozdanie z laborki z elektroniki",
+      "opis": "Ćwiczenie 4 – wzmacniacz operacyjny, wykresy z oscyloskopu",
+      "termin": "2026-11-17",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["studia", "lab"]
+    },
+    {
+      "id": 3,
+      "tytul": "Zapłacić za akademik",
+      "opis": "",
+      "termin": "2026-11-20",
+      "priorytet": "wysoki",
+      "wykonane": false,
+      "tagi": ["finanse"]
+    },
+    {
+      "id": 4,
+      "tytul": "Kolokwium z analizy matematycznej",
+      "opis": "Rozdziały 6–9, całki i szeregi",
+      "termin": "2026-11-25",
+      "priorytet": "wysoki",
+      "wykonane": false,
+      "tagi": ["studia"]
+    },
+    {
+      "id": 5,
+      "tytul": "Egzamin poprawkowy z fizyki",
+      "opis": "Sala 204, zabrać legitymację",
+      "termin": "2026-11-26",
+      "priorytet": "wysoki",
+      "wykonane": false,
+      "tagi": ["studia"]
+    },
+    {
+      "id": 6,
+      "tytul": "Projekt z baz danych – etap 2",
+      "opis": "Diagram ERD i skrypty SQL, oddajemy w parach",
+      "termin": "2026-11-27",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["studia", "projekt"]
+    },
+    {
+      "id": 7,
+      "tytul": "Zakupy na tydzień",
+      "opis": "Makaron, jajka, kawa, płyn do naczyń",
+      "termin": "2026-11-19",
+      "priorytet": "niski",
+      "wykonane": false,
+      "tagi": ["dom"]
+    },
+    {
+      "id": 8,
+      "tytul": "Wejściówka z programowania obiektowego",
+      "opis": "Dziedziczenie i polimorfizm",
+      "termin": "2026-11-23",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["studia"]
+    },
+    {
+      "id": 9,
+      "tytul": "Siłownia",
+      "opis": "",
+      "termin": "2026-11-21",
+      "priorytet": "niski",
+      "wykonane": false,
+      "tagi": ["zdrowie"]
+    },
+    {
+      "id": 10,
+      "tytul": "Napisać CV do praktyk",
+      "opis": "Dodać projekt z mikrokontrolerów",
+      "termin": "2026-12-05",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["praca"]
+    },
+    {
+      "id": 11,
+      "tytul": "Przeczytać artykuł do seminarium",
+      "opis": "",
+      "termin": null,
+      "priorytet": "niski",
+      "wykonane": false,
+      "tagi": ["studia"]
+    },
+    {
+      "id": 12,
+      "tytul": "Oddać książki do biblioteki",
+      "opis": "Tanenbaum – Sieci komputerowe",
+      "termin": "2026-11-22",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": []
+    },
+    {
+      "id": 13,
+      "tytul": "Umówić się do dentysty",
+      "opis": "",
+      "termin": null,
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["zdrowie"]
+    },
+    {
+      "id": 14,
+      "tytul": "Zapisać się na zajęcia z WF",
+      "opis": "Zapisy w USOS",
+      "termin": "2026-11-14",
+      "priorytet": "niski",
+      "wykonane": true,
+      "tagi": ["studia"]
+    },
+    {
+      "id": 15,
+      "tytul": "Prezentacja na angielski",
+      "opis": "Temat: smart cities, 10 minut",
+      "termin": "2026-12-02",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["studia", "projekt"]
+    },
+    {
+      "id": 16,
+      "tytul": "Posprzątać pokój",
+      "opis": "",
+      "termin": "2026-11-22",
+      "priorytet": "niski",
+      "wykonane": false,
+      "tagi": ["dom"]
+    },
+    {
+      "id": 17,
+      "tytul": "Przelać kasę za wyjazd integracyjny",
+      "opis": "120 zł na konto samorządu",
+      "termin": "2026-11-16",
+      "priorytet": "sredni",
+      "wykonane": true,
+      "tagi": ["finanse"]
+    },
+    {
+      "id": 18,
+      "tytul": "Zadzwonić do mamy",
+      "opis": "",
+      "termin": null,
+      "priorytet": "niski",
+      "wykonane": false,
+      "tagi": []
+    },
+    {
+      "id": 19,
+      "tytul": "Lista zadań z algebry",
+      "opis": "Zadania 1–12, macierze",
+      "termin": "2026-11-24",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["studia"]
+    },
+    {
+      "id": 20,
+      "tytul": "Zmiana w pracy w kawiarni",
+      "opis": "Sobota 8:00–14:00",
+      "termin": "2026-11-21",
+      "priorytet": "sredni",
+      "wykonane": false,
+      "tagi": ["praca"]
+    }
+  ]
+}
