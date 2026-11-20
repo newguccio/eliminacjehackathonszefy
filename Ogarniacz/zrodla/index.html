@@ -449,6 +449,12 @@ textarea.inp{min-height:84px;resize:vertical;line-height:1.45}
 .menu .sub{display:block;font-size:12.5px;color:var(--muted);margin-top:1px}
 .menu .danger{color:var(--red)}
 .menu .danger svg{color:var(--red)}
+.relief-choices{border:0;padding:0;margin:0;min-width:0}
+.relief-choices legend{font-weight:650;margin-bottom:6px}
+.relief-choices label{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.relief-choices input{flex:none;margin-top:4px;accent-color:var(--ink)}
+.relief-choices span{overflow-wrap:anywhere}
+.relief-choices small{display:block;color:var(--muted);font-size:14px;line-height:1.45;margin-top:3px}
 
 /* przegląd zaległości */
 .tri-progress{height:4px;border-radius:9px;background:var(--block);overflow:hidden;margin:4px 0 16px}
@@ -482,6 +488,10 @@ body.sheet-on .toasts{bottom:auto;top:calc(12px + var(--safe-t));padding-left:16
 .drop-hint.on{display:grid}
 .daylist .row-inner{padding-left:2px}
 .plan-list{margin:10px 0}
+.demo-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:9px clamp(14px,4vw,48px);background:var(--ink);color:white;font-size:14px}
+.demo-bar[hidden]{display:none}
+.demo-bar a{color:inherit;text-underline-offset:3px}
+@media(prefers-color-scheme:dark){.demo-bar{background:#263779}}
 .plan-item{display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
 .plan-item:first-child{border-top:0}
 .plan-item .pd{flex:none;width:56px;text-align:center;font-size:12.5px;color:var(--muted)}
@@ -505,6 +515,7 @@ body.sheet-on .toasts{bottom:auto;top:calc(12px + var(--safe-t));padding-left:16
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/></svg>
       </button>
     </header>
+    <aside class="demo-bar" id="demoBar" aria-label="Tryb demonstracyjny" hidden><span>Demo · Kolokwium za tydzień</span><a href="?demo=1">Zacznij od nowa</a><a href="./index.html">Otwórz mój planner</a></aside>
     <main id="view" class="page" tabindex="-1"></main>
   </div>
 </div>
@@ -526,6 +537,7 @@ body.sheet-on .toasts{bottom:auto;top:calc(12px + var(--safe-t));padding-left:16
    ========================================================= */
 
 const SAMPLE = __SAMPLE__;
+const DEMO = new URLSearchParams(location.search).get("demo") === "1";
 
 /* ---------- ikony ---------- */
 const I = {
@@ -559,8 +571,8 @@ const FOLD = {"ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź
 const fold = s => String(s).replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, c => FOLD[c]).toLowerCase();
 
 const pad = n => String(n).padStart(2, "0");
-const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const parseYmd = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const ymd = d => `${String(d.getFullYear()).padStart(4, "0")}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseYmd = s => { const [y,m,d] = s.split("-").map(Number); const date = new Date(2000,0,1); date.setFullYear(y,m-1,d); return date; };
 const todayDate = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
 const today = () => ymd(todayDate());
 const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate()+n); return ymd(d); };
@@ -609,7 +621,6 @@ const PRIO_SW = {niski:"var(--hl-lo-solid)", sredni:"var(--hl-mid-solid)", wysok
    ========================================================= */
 const KEY = "ogarniacz:v1";
 let state = null;      // { doc:{wersja, zadania:[...]}, meta:{doneAt:{}, focus:{byTask:{}, byDay:{}}, extraTop:{}} }
-let undoStack = [];
 
 function emptyMeta(){ return { doneAt:{}, focus:{ byTask:{}, byDay:{} } }; }
 
@@ -617,7 +628,8 @@ function emptyMeta(){ return { doneAt:{}, focus:{ byTask:{}, byDay:{} } }; }
 function normalizeTask(raw, warn, idx){
   const t = (raw && typeof raw === "object" && !Array.isArray(raw)) ? {...raw} : {};
   const where = `zadanie nr ${idx+1}`;
-  if (!(Number.isInteger(t.id))) { if (typeof t.id === "string" && /^\d+$/.test(t.id)) t.id = Number(t.id); else { t.id = null; } }
+  if (typeof t.id === "string" && /^-?\d+$/.test(t.id)) t.id = Number(t.id);
+  if (!Number.isSafeInteger(t.id)) t.id = null;
   if (typeof t.tytul !== "string" || !t.tytul.trim()) { warn.push(`${where}: brak tytułu`); t.tytul = typeof t.tytul === "string" ? t.tytul : String(t.tytul ?? "Bez tytułu"); if (!t.tytul.trim()) t.tytul = "Bez tytułu"; }
   if (typeof t.opis !== "string") t.opis = t.opis == null ? "" : String(t.opis);
   if (t.termin === undefined || t.termin === "") t.termin = null;
@@ -629,13 +641,13 @@ function normalizeTask(raw, warn, idx){
   }
   t.wykonane = t.wykonane === true || t.wykonane === "true";
   if (!Array.isArray(t.tagi)) t.tagi = [];
-  t.tagi = [...new Set(t.tagi.filter(x => typeof x === "string" && x.trim()).map(x => x.trim()))];
+  t.tagi = t.tagi.filter(x => typeof x === "string");
   return t;
 }
 
 function parseDoc(text){
   let raw;
-  try { raw = JSON.parse(text); }
+  try { raw = JSON.parse(text.replace(/^\uFEFF/, "")); }
   catch(e){ throw new Error("To nie jest poprawny plik JSON."); }
   let list, top = {};
   if (Array.isArray(raw)) list = raw;
@@ -644,54 +656,110 @@ function parseDoc(text){
   const warn = [];
   const zadania = list.map((r,i) => normalizeTask(r, warn, i));
   // id: uzupełnij brakujące i rozwiąż duplikaty
-  const used = new Set(); let max = zadania.reduce((m,t) => Number.isInteger(t.id) ? Math.max(m,t.id) : m, 0);
+  const used = new Set(), allocate = idAllocator(occupiedIds(zadania));
   for (const t of zadania){
-    if (!Number.isInteger(t.id) || used.has(t.id)) { warn.push(t.id === null ? `zadanie bez id, nadano ${max+1}` : `powtórzone id ${t.id}, nadano nowe`); t.id = ++max; }
+    if (t.id === null || used.has(t.id)) {
+      const newId = allocate();
+      warn.push(t.id === null ? `zadanie bez id, nadano ${newId}` : `powtórzone id ${t.id}, nadano ${newId}`);
+      t.id = newId;
+    }
     used.add(t.id);
   }
   const doc = {...top, wersja: top.wersja ?? 1, zadania};
   return { doc, warn };
 }
 
-const KNOWN = ["id","tytul","opis","termin","priorytet","wykonane","tagi"];
-/* Eksport w dokładnie tym samym formacie: kolejność pól jak w pliku wzorcowym, dodatkowe pola na końcu. */
 function serializeDoc(doc){
-  const out = { wersja: doc.wersja ?? 1 };
-  for (const k of Object.keys(doc)) if (k !== "wersja" && k !== "zadania") out[k] = doc[k];
-  out.zadania = doc.zadania.map(t => {
-    const o = {};
-    for (const k of KNOWN) o[k] = k === "termin" ? (t.termin ?? null) : t[k];
-    for (const k of Object.keys(t)) if (!KNOWN.includes(k)) o[k] = t[k];
-    return o;
-  });
-  // tagi w jednej linii jak w przykładzie: podmieniamy tablicę na znacznik, potem wstawiamy zwartą wersję
-  const tagLines = [];
-  out.zadania.forEach(o => { if (Array.isArray(o.tagi)) { tagLines.push("[" + o.tagi.map(g => JSON.stringify(g)).join(", ") + "]"); o.tagi = `\u0000TAGI${tagLines.length-1}\u0000`; } });
-  return JSON.stringify(out, null, 2).replace(/"\\u0000TAGI(\d+)\\u0000"/g, (m, i) => tagLines[+i]) + "\n";
+  return JSON.stringify(doc, null, 2) + "\n";
 }
 
 function load(){
   try {
     const s = localStorage.getItem(KEY);
-    if (s){ const o = JSON.parse(s); if (o && o.doc && Array.isArray(o.doc.zadania)) { state = o; state.meta = Object.assign(emptyMeta(), o.meta||{}); return; } }
+    if (s){
+      const stored = JSON.parse(s);
+      if (Array.isArray(stored?.doc?.zadania)){
+        const doc = parseDoc(JSON.stringify(stored.doc)).doc;
+        const ids = new Set(doc.zadania.map(t => String(t.id)));
+        const taskEntries = values => Object.fromEntries(Object.entries(values || {}).filter(([id]) => ids.has(id)));
+        const focus = stored.meta?.focus || {};
+        state = {doc, meta: {doneAt: taskEntries(stored.meta?.doneAt), focus: {byTask: taskEntries(focus.byTask), byDay: focus.byDay || {}}}};
+        return;
+      }
+    }
   } catch(e){}
   state = { doc: parseDoc(JSON.stringify(SAMPLE)).doc, meta: emptyMeta() };
 }
-function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+function save(){ if (DEMO) return; try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
 
 const tasks = () => state.doc.zadania;
 const byId = id => tasks().find(t => t.id === id);
-const nextId = () => tasks().reduce((m,t) => Math.max(m, t.id), 0) + 1;
-const allTags = () => { const c = {}; for (const t of tasks()) for (const g of t.tagi) c[g] = (c[g]||0)+1; return Object.keys(c).sort((a,b) => c[b]-c[a] || a.localeCompare(b,"pl")); };
+function occupiedIds(list){
+  const ids = new Set();
+  for (const t of list){
+    if (t.id !== null) ids.add(t.id);
+    const parent = studyParentId(t);
+    if (parent !== null) ids.add(parent);
+  }
+  return ids;
+}
+function idAllocator(ids){
+  let last = 0;
+  for (const id of ids) if (id > last) last = id;
+  return () => {
+    do { last = last >= Number.MAX_SAFE_INTEGER ? 1 : last + 1; } while (ids.has(last));
+    ids.add(last);
+    return last;
+  };
+}
+const nextId = () => idAllocator(occupiedIds(tasks()))();
+
+function mergeDocument(doc){
+  const existing = occupiedIds(tasks());
+  const incoming = occupiedIds(doc.zadania);
+  const allocate = idAllocator(new Set([...existing, ...incoming]));
+  const changed = new Map();
+  for (const id of incoming){
+    if (!existing.has(id)) continue;
+    changed.set(id, allocate());
+  }
+  for (const task of doc.zadania){
+    const t = {...task, id: changed.get(task.id) ?? task.id};
+    const parent = studyParentId(task);
+    if (changed.has(parent)) t.opis = task.opis.replace(/^Plan nauki \(#-?\d+\)/, `Plan nauki (#${changed.get(parent)})`);
+    tasks().push(t);
+  }
+}
+function replaceDocument(doc){
+  state.doc = doc;
+  state.meta = emptyMeta();
+}
+function removeTask(id){
+  state.doc.zadania = tasks().filter(t => t.id !== id);
+  delete state.meta.doneAt[id];
+  delete state.meta.focus.byTask[id];
+}
+const allTags = () => { const c = Object.create(null); for (const t of tasks()) for (const g of t.tagi) c[g] = (c[g]||0)+1; return Object.keys(c).sort((a,b) => c[b]-c[a] || a.localeCompare(b,"pl")); };
 
 /* Każda zmiana: zrzut stanu → zmiana → zapis → render → toast z „Cofnij”. */
 function commit(label, fn, opts={}){
   const snap = clone(state);
+  const previousDoc = state.doc;
+  const focusedTask = byId(timer.id);
+  const previousFocus = focusedTask ? captureFocus() : null;
   fn();
-  undoStack.push(snap); if (undoStack.length > 30) undoStack.shift();
+  const replaced = previousDoc !== state.doc;
+  const interrupted = focusedTask && focusedTask !== byId(timer.id);
+  if (interrupted) restoreFocus(null);
   save();
   if (!opts.noRender) render();
-  if (label) toast(label, () => { state = snap; save(); render(); toast("Cofnięto"); });
+  if (label) toast(label, () => {
+    state = snap;
+    if (replaced || interrupted) restoreFocus(previousFocus);
+    else if (timer.id !== null && !byId(timer.id)) restoreFocus(null);
+    if (sheetOpen) closeSheet();
+    save(); render(); toast("Cofnięto");
+  });
 }
 
 function setDone(t, val){
@@ -704,8 +772,12 @@ function setDone(t, val){
    rozumienie polskich zdań przy dodawaniu, podpowiedzi tagów
    ========================================================= */
 const EXAM_RE = /(kolokw|kolos|egzamin|sprawdzian|wejsciowk|kartkowk|zaliczen|\btest|quiz|obron)/;
-const isExam = t => EXAM_RE.test(fold(t.tytul));
-const isPlanFor = (t, parent) => t.opis && t.opis.includes(`(#${parent.id})`);
+function studyParentId(t){
+  const marker = /^Plan nauki \(#(-?\d+)\), sesja \d+ z \d+\b/.exec(t.opis || "");
+  return marker ? Number(marker[1]) : null;
+}
+const isExam = t => studyParentId(t) === null && EXAM_RE.test(fold(t.tytul));
+const isPlanFor = (t, parent) => studyParentId(t) === parent.id;
 const hasPlan = parent => tasks().some(t => t !== parent && isPlanFor(t, parent));
 
 /* Ile „waży” zadanie teraz: priorytet × pilność; kolokwia dostają premię, bo nauka zajmuje czas. */
@@ -745,17 +817,21 @@ const ranked = () => tasks().filter(t => !t.wykonane).sort((a,b) => score(b)-sco
    Terminy liczą się z wagą priorytetu, a przed kolokwium dochodzi „ukryte” obciążenie nauką (3 dni wcześniej).
    Zaległe zadania spadają na dziś. */
 const BUSY = 4, CRUNCH = 6;
-function radar(days=14){
-  const t0 = today(), out = [];
+function radar(days=14, {start=today(), skipPrepFor=null, entries=tasks()}={}){
+  const t0 = start, out = [];
+  const includeOverdue = t0 === today();
+  const planned = new Set(entries.map(studyParentId).filter(id => id !== null));
   for (let i=0;i<days;i++){ const s = addDays(t0,i); out.push({date:s, due:0, prep:0, items:[], prepFor:[]}); }
   const at = s => out[diffDays(s, t0)];
-  for (const t of tasks()){
+  for (const t of entries){
     if (t.wykonane || !t.termin) continue;
-    const d = daysFromToday(t.termin);
+    const d = diffDays(t.termin, t0);
     const w = PRIO_W[t.priorytet];
-    if (d < 0){ out[0].due += w*0.5; out[0].items.push(t); }
+    if (d < 0){
+      if (includeOverdue){ out[0].due += w*0.5; out[0].items.push(t); }
+    }
     else if (d < days){ at(t.termin).due += w; at(t.termin).items.push(t); }
-    if (isExam(t) && d >= 1 && !hasPlan(t)){
+    if (isExam(t) && d >= 1 && t.id !== skipPrepFor && !planned.has(t.id)){
       for (let k=1;k<=3;k++){ const dd = d-k; if (dd >= 0 && dd < days){ out[dd].prep += 1.2; out[dd].prepFor.push(t); } }
     }
   }
@@ -775,16 +851,16 @@ function examClusters(){
   return clusters;
 }
 /* Najlżejszy dzień w oknie przed terminem (do podpowiedzi przy dodawaniu) */
-function lighterDay(dateStr, excludeId){
+function lighterDay(dateStr, excludeId, priority){
   const r = radarExcluding(excludeId);
   const idx = diffDays(dateStr, today());
   if (idx < 0 || idx >= r.length) return null;
-  if (r[idx].load + 2 < CRUNCH) return null;
+  if (r[idx].load + PRIO_W[priority] < CRUNCH) return null;
   let best = null;
   for (let k=1;k<=3;k++){ const j = idx-k; if (j < 0) break; if (!best || r[j].load < best.load) best = r[j]; }
   return best && best.load < r[idx].load - 1 ? {crowded:r[idx], best} : {crowded:r[idx], best:null};
 }
-function radarExcluding(id){ const keep = state.doc.zadania; state.doc.zadania = keep.filter(t => t.id !== id); const r = radar(); state.doc.zadania = keep; return r; }
+function radarExcluding(id){ return radar(14, {entries: tasks().filter(t => t.id !== id)}); }
 
 /* Plan nauki do kolokwium: sesje rozłożone wstecz od terminu (1, 3, 6, 10 dni przed — jak w powtórkach rozłożonych w czasie).
    Jeśli w opisie są rozdziały „3–5”, dzielimy je między sesje, a ostatnia to powtórka całości. */
@@ -820,12 +896,47 @@ function studyPlan(t){
   }
   return offs.map((date, i) => ({
     tytul: `${t.tytul}: ${parts[i]}`,
-    opis: `Plan nauki (#${t.id}), sesja ${i+1} z ${s}`,
+    opis: `Plan nauki (#${t.id}), sesja ${i+1} z ${s}\n` + (i === s-1
+      ? "Odpowiedz z pamięci na trzy pytania przekrojowe. Sprawdź odpowiedzi w notatkach i spróbuj ponownie tam, gdzie pojawił się błąd."
+      : "Po nauce zamknij notatki. Zapisz dwa pytania o ten materiał i odpowiedz na nie z pamięci. Sprawdź odpowiedzi i zaznacz, do czego chcesz wrócić."),
     termin: date,
     priorytet: i === s-1 ? t.priorytet : "sredni",
     wykonane: false,
     tagi: [...new Set([...t.tagi, "nauka"])],
   }));
+}
+
+/* Porównujemy tylko sąsiednie dni, z co najmniej jednym dniem przerwy między sesjami. */
+function fitStudyPlan(exam, plan){
+  if (exam.termin <= today()) return plan.map(p => ({date: p.termin}));
+  const firstPossible = addDays(plan[0].termin, -1);
+  const start = firstPossible < today() ? today() : firstPossible;
+  const lastPossible = addDays(plan[plan.length-1].termin, 1);
+  const days = radar(diffDays(lastPossible, start)+1, {start, skipPrepFor: exam.id});
+  const day = date => days[diffDays(date, start)];
+  const choices = [];
+  for (const [i, session] of plan.entries()){
+    const original = day(session.termin);
+    let best = original;
+    for (const shift of [-1, 1]){
+      const date = addDays(session.termin, shift);
+      if (date < start || date >= exam.termin) continue;
+      if (i > 0 && diffDays(date, choices[i-1].date) < 2) continue;
+      if (i+1 < plan.length && diffDays(plan[i+1].termin, date) < 2) continue;
+      const candidate = day(date);
+      if (candidate.load < best.load && original.load - candidate.load >= 1) best = candidate;
+    }
+    let reason = "";
+    if (best !== original){
+      const due = original.items.find(t => t.termin === original.date);
+      const prep = original.prepFor[0];
+      const why = due ? `w planie jest „${due.tytul}”`
+        : prep ? `radar przewiduje naukę do „${prep.tytul}”` : "zaległości zwiększają obciążenie";
+      reason = `Lżejszy dzień. W pierwotnym terminie (${shortDate(original.date)}) ${why}.`;
+    }
+    choices.push({date: best.date, reason});
+  }
+  return choices;
 }
 
 /* ---------- szybkie dodawanie zdaniem ---------- */
@@ -875,7 +986,7 @@ function parseQuick(text, ignore={}){
   let opis = "";
   let src = text;
   const di = src.indexOf("//");
-  if (di >= 0){ opis = src.slice(di+2).trim(); src = src.slice(0, di); if (opis) res.hits.push({kind:"opis", label:"opis"}); }
+  if (di >= 0 && !ignore.opis){ opis = src.slice(di+2).trim(); src = src.slice(0, di); if (opis) res.hits.push({kind:"opis", label:"opis"}); }
   const f = fold(src);
   // tagi
   const tagRe = /(^|\s)#([\p{L}\p{N}_\-]+)/gu; let m;
@@ -916,7 +1027,7 @@ const TAG_DICT = [
 function stems(s){ return fold(s).split(/[^a-z0-9]+/).filter(w => w.length >= 4).map(w => w.slice(0,5)); }
 function suggestTags(title, current=[], excludeId=null){
   if (!title.trim()) return [];
-  const sc = {}, f = fold(title), st = new Set(stems(title));
+  const sc = Object.create(null), f = fold(title), st = new Set(stems(title));
   for (const [tag, re] of TAG_DICT) if (re.test(f)) sc[tag] = (sc[tag]||0) + 2;
   for (const t of tasks()){
     if (t.id === excludeId) continue;
@@ -1008,14 +1119,14 @@ function semester(){ const d = todayDate(), m = d.getMonth()+1, y = d.getFullYea
 
 /* tagi: stałe kolory dla typowych, reszta z hasza nazwy */
 const TAG_FIXED = { studia:0, finanse:1, dom:2, praca:3, nauka:4, projekt:5, zdrowie:6, lab:7 };
-function tagCls(g){ const f = fold(g); if (f in TAG_FIXED) return "tg-"+TAG_FIXED[f]; let h = 0; for (const c of f) h = (h*31 + c.charCodeAt(0)) >>> 0; return "tg-"+(h%8); }
+function tagCls(g){ const f = fold(g); if (Object.hasOwn(TAG_FIXED, f)) return "tg-"+TAG_FIXED[f]; let h = 0; for (const c of f) h = (h*31 + c.charCodeAt(0)) >>> 0; return "tg-"+(h%8); }
 const tagPill = g => `<span class="pill tag ${tagCls(g)}">${esc(g)}</span>`;
 
 /* ---------- menu boczne, zakładki, ścieżka ---------- */
 function renderChrome(){
   const cur = p => tab === p ? 'aria-current="page"' : "";
   const all = tasks(), done = all.filter(t => t.wykonane).length, pct = all.length ? Math.round(done/all.length*100) : 0;
-  const counts = {}; for (const t of all) if (!t.wykonane) for (const g of t.tagi) counts[g] = (counts[g]||0)+1;
+  const counts = Object.create(null); for (const t of all) if (!t.wykonane) for (const g of t.tagi) counts[g] = (counts[g]||0)+1;
   $("#side").innerHTML = `
     <div class="ws">${LOGO}<div><b>Ogarniacz</b><span>${semester()}</span></div></div>
     <div class="nav">
@@ -1138,12 +1249,11 @@ function smartNotices({plan=true}={}){
     const a = c[0], b = c[c.length-1];
     html += `<div class="callout warn">${ILL.stos}<div class="nt"><b>${c.length} ${plural(c.length,"sprawdzian","sprawdziany","sprawdzianów")} w ${nDays(diffDays(b.termin,a.termin)+1)}</b><p>${joinPl(c.map(t => `${esc(t.tytul)} (${shortDate(t.termin)})`))}. Zacznij naukę do późniejszego już teraz, bo tuż przed nim nie będzie kiedy.</p></div></div>`;
   }
-  const r = radar(7);
-  const crunchDays = r.filter(o => o.level === "crunch");
-  const movable = tasks().filter(t => !t.wykonane && t.priorytet === "niski" && t.termin && daysFromToday(t.termin) >= 0 && daysFromToday(t.termin) < 7);
-  if (crunchDays.length && movable.length){
-    html += `<div class="callout warn">${ILL.piorko}<div class="nt"><b>Ten tydzień jest przeładowany</b><p>Najciężej: ${joinPl(crunchDays.map(o => shortDate(o.date)))}. ${movable.length === 1 ? "Jedno zadanie" : nTasks(movable.length)} o niskim priorytecie ${movable.length===1?"może":"mogą"} poczekać tydzień: ${joinPl(movable.map(t => esc(t.tytul)))}.</p>
-      <div class="btns"><button class="btn primary" data-act="relieve">Przesuń o tydzień</button></div></div></div>`;
+  const relief = reliefOptions();
+  if (relief.length){
+    const crowdedDates = [...new Set(relief.map(option => shortDate(option.from)))];
+    html += `<div class="callout warn">${ILL.piorko}<div class="nt"><b>Znajdź lżejszy dzień</b><p>W radarze na czerwono: ${joinPl(crowdedDates)}. Możesz wybrać jedną sprawę o niskim priorytecie i zmienić jej termin.</p>
+      <div class="btns"><button class="btn primary" data-act="relieve">Porównaj terminy</button></div></div></div>`;
   }
   return html;
 }
@@ -1243,7 +1353,7 @@ function renderRadar(){
   const r = radar(14);
   const max = Math.max(CRUNCH + 1, ...r.map(o => o.load));
   let html = pageHead("radar", "Najbliższe dwa tygodnie");
-  html += `<p class="summary">Ile masz na głowie. Przed każdym kolokwium doliczam trzy dni nauki, nawet jeśli nie zapisałeś ich jako zadań.</p>`;
+  html += `<p class="summary">Paski pokazują terminy i przewidywane przygotowanie. Gdy rozpiszesz kolokwium na sesje, radar policzy naukę w wybranych dniach.</p>`;
   html += `<section class="block radar" aria-label="Obciążenie dni"><div class="days">${r.map((o,i) => {
     const d = parseYmd(o.date), wd = d.getDay();
     const hDue = o.due / max * 90, hPrep = o.prep / max * 90;
@@ -1334,7 +1444,7 @@ function toggleTask(id, rowEl){
 
 function deleteTask(id, rowEl){
   const t = byId(id); if (!t) return;
-  const go = () => commit(`Usunięto: ${t.tytul}`, () => { state.doc.zadania = tasks().filter(x => x.id !== id); delete state.meta.doneAt[id]; });
+  const go = () => { if (byId(id) === t) commit(`Usunięto: ${t.tytul}`, () => removeTask(id)); };
   if (rowEl){ rowEl.style.height = rowEl.offsetHeight + "px"; requestAnimationFrame(() => { rowEl.style.height = "0px"; rowEl.style.opacity = "0"; }); setTimeout(go, 240); }
   else go();
 }
@@ -1390,11 +1500,7 @@ document.addEventListener("click", e => {
     case "nextfocus": focusIdx++; render(); break;
     case "triage": openTriage(); break;
     case "plan": openPlan(byId(id)); break;
-    case "relieve": {
-      const movable = tasks().filter(t => !t.wykonane && t.priorytet === "niski" && t.termin && daysFromToday(t.termin) >= 0 && daysFromToday(t.termin) < 7);
-      commit(`Przesunięto ${nTasks(movable.length)} o tydzień`, () => movable.forEach(t => t.termin = addDays(t.termin, 7)));
-      break;
-    }
+    case "relieve": openRelief(); break;
     case "day": openDay(el.dataset.d); break;
     case "tab": if (el.dataset.v === "zadania" && tab !== "zadania") { listState.tag = null; } switchTab(el.dataset.v); break;
     case "view": listState.view = el.dataset.v; if (tab !== "zadania") switchTab("zadania"); else render(); break;
@@ -1492,6 +1598,8 @@ function closeSheet(){
 function openEditor(task, preset={}){
   const isNew = !task;
   const f = isNew ? { tytul:"", opis:"", termin:null, priorytet:"sredni", tagi:[], ...preset } : clone(task);
+  const sessionHeader = studyParentId(f) === null ? "" : f.opis.match(/^Plan nauki \(#-?\d+\), sesja \d+ z \d+/)[0];
+  const editableDescription = sessionHeader ? f.opis.slice(sessionHeader.length).trimStart() : f.opis;
   const touched = { termin: !!preset.termin, priorytet: !!preset.priorytet, tagi: !!preset.tagi };
   let ignore = {}, raw = "";
   const t0 = today();
@@ -1510,7 +1618,7 @@ function openEditor(task, preset={}){
       <div class="pl">${PI.tag} Tagi</div>
       <div class="pv"><div class="tagbox" id="e-tags"><input id="e-taginp" placeholder="dodaj tag" autocomplete="off" enterkeyhint="enter" aria-label="Nowy tag"></div><div class="sugs" id="e-sugs"></div></div>
       <div class="pl">${PI.desc} Opis</div>
-      <div class="pv"><textarea id="e-desc" class="inp" placeholder="Szczegóły, rozdziały, sala…" aria-label="Opis">${esc(f.opis)}</textarea></div>
+      <div class="pv">${sessionHeader ? `<p class="hint">${esc(sessionHeader)}</p>` : ""}<textarea id="e-desc" class="inp" placeholder="Szczegóły, rozdziały, sala…" aria-label="Opis">${esc(editableDescription)}</textarea></div>
     </div>
     ${!isNew && f.termin && isExam(f) && !f.wykonane ? `<div class="callout">${ILL.ksiazka}<div class="nt"><b>${hasPlan(task) ? "Plan nauki już jest" : "Rozpisać naukę na sesje?"}</b><p>${hasPlan(task) ? "Sesje nauki do tego sprawdzianu są na liście." : "Dodam kilka krótkich sesji przed terminem."}</p>${hasPlan(task) ? "" : `<div class="btns"><button class="btn" id="e-plan">Rozpisz plan nauki</button></div>`}</div></div>` : ""}
     <div class="sheet-actions">
@@ -1527,7 +1635,7 @@ function openEditor(task, preset={}){
       $$("#e-qd .chip", root).forEach(b => b.setAttribute("aria-pressed", (b.dataset.v || null) === (f.termin || null) ? "true" : "false"));
       const box = $("#e-load", root); box.innerHTML = "";
       if (f.termin && !f.wykonane){
-        const l = lighterDay(f.termin, task?.id);
+        const l = lighterDay(f.termin, task?.id, f.priorytet);
         if (l && l.crowded.load + PRIO_W[f.priorytet] >= CRUNCH){
           box.innerHTML = `<div class="load-warn">${I.alert.replace("<svg",'<svg width="16" height="16" style="flex:none;margin-top:2px"')}<span>Ten dzień jest już mocno zajęty (${nTasks(l.crowded.items.length)}${l.crowded.prepFor.length?" i nauka":""}).${l.best ? ` Luźniej jest ${WD_IN[parseYmd(l.best.date).getDay()]}, ${parseYmd(l.best.date).getDate()} ${MON_SHORT[parseYmd(l.best.date).getMonth()]}. <button type="button" id="e-move">Przenieś</button>` : ""}</span></div>`;
           $("#e-move", box)?.addEventListener("click", () => { f.termin = l.best.date; touched.termin = true; paintDate(); });
@@ -1558,11 +1666,11 @@ function openEditor(task, preset={}){
       f.tagi = f.tagi.filter(g => !autoTags.includes(g) || p.tagi.includes(g));
       for (const g of p.tagi) if (!f.tagi.includes(g)) f.tagi.push(g);
       autoTags = p.tagi;
-      if (p.opis && !desc.dataset.touched) desc.value = p.opis;
+      if (!desc.dataset.touched) desc.value = p.opis || preset.opis || "";
       const hits = p.hits.slice();
       if (!p.priorytet && sp && !touched.priorytet) hits.push({kind:"auto-prio", label:"wysoki, bo to sprawdzian"});
       $("#e-parsed", root).innerHTML = (hits.length && p.tytul ? `<span class="as">Zapiszę jako: <b>${esc(p.tytul)}</b></span>` : "") + hits.map(h => `<button type="button" data-k="${esc(h.kind)}" aria-label="Rozpoznano: ${esc(h.label)}. Kliknij, żeby zignorować">${esc(h.label)}</button>`).join("");
-      $$("#e-parsed button", root).forEach(b => b.onclick = () => { const k = b.dataset.k; if (k === "auto-prio") { touched.priorytet = true; f.priorytet = "sredni"; } else if (k === "opis") { desc.value = ""; } else ignore[k] = true; reparse(); });
+      $$("#e-parsed button", root).forEach(b => b.onclick = () => { const k = b.dataset.k; if (k === "auto-prio") { touched.priorytet = true; f.priorytet = "sredni"; } else ignore[k] = true; reparse(); });
       paintDate(); paintPrio(); paintTags();
     };
 
@@ -1582,7 +1690,8 @@ function openEditor(task, preset={}){
       if (ti.value.trim()) addTagFromInput();
       const tytul = (isNew ? f.tytul : title.value).trim();
       if (!tytul){ title.focus(); title.placeholder = "Tytuł jest potrzebny"; return; }
-      const data = { tytul, opis: desc.value.trim(), termin: f.termin || null, priorytet: f.priorytet, tagi: [...f.tagi] };
+      const opis = [sessionHeader, desc.value.trim()].filter(Boolean).join("\n");
+      const data = { tytul, opis, termin: f.termin || null, priorytet: f.priorytet, tagi: [...f.tagi] };
       if (isNew){
         const t = { id: nextId(), ...data, wykonane: false };
         closeSheet();
@@ -1606,15 +1715,33 @@ function openEditor(task, preset={}){
 
 /* ---------- plan nauki ---------- */
 function openPlan(t){
-  if (!t) return;
+  if (!t || !isExam(t) || t.wykonane) return;
+  if (hasPlan(t)){ toast("Ten sprawdzian ma już plan nauki."); return; }
   if (!t.termin){ toast("Najpierw ustaw termin sprawdzianu."); return; }
   const plan = studyPlan(t);
+  const fitted = fitStudyPlan(t, plan);
+  const hasChanges = fitted.some((choice, i) => choice.date !== plan[i].termin);
   const d = daysFromToday(t.termin);
-  const body = `<p class="about">${d <= 0 ? "Termin jest dziś albo minął, więc zostaje jedna szybka sesja." : `Do terminu: ${nDays(d)}. Sesje są rozłożone tak, żeby każda kolejna była powtórką poprzedniej — tak zapamiętuje się więcej niż przy jednej nocy przed.`}</p>
-    <div class="plan-list">${plan.map(p => { const pd = parseYmd(p.termin); return `<div class="plan-item"><div class="pd"><b>${pd.getDate()}</b>${WD_SHORT[pd.getDay()]}, ${MON_SHORT[pd.getMonth()]}</div><div class="pt">${esc(p.tytul.slice(t.tytul.length + 2).replace(/^./, c => c.toUpperCase()))}<small>${relDate(p.termin)}, priorytet ${PRIO_LABEL[p.priorytet]}</small></div></div>`; }).join("")}</div>
+  const rows = adapt => plan.map((p, i) => {
+    const date = adapt ? fitted[i].date : p.termin;
+    const pd = parseYmd(date);
+    const reason = adapt && fitted[i].reason;
+    return `<div class="plan-item"><div class="pd"><b>${pd.getDate()}</b>${WD_SHORT[pd.getDay()]}, ${MON_SHORT[pd.getMonth()]}</div><div class="pt">${esc(p.tytul.slice(t.tytul.length + 2).replace(/^./, c => c.toUpperCase()))}<small>${relDate(date)}, priorytet ${PRIO_LABEL[p.priorytet]}</small>${reason ? `<small>${esc(reason)}</small>` : ""}</div></div>`;
+  }).join("");
+  const body = `<p class="about">${d <= 0 ? "Termin jest dziś albo minął, więc proponuję jedną sesję na dziś." : `Do sprawdzianu ${nDays(d)}. Przy każdej sesji znajdziesz krótką wskazówkę, jak przećwiczyć materiał z pamięci.`}</p>
+    ${hasChanges ? '<label><input id="p-adapt" type="checkbox" checked> Wybierz lżejsze dni według radaru</label>' : ""}
+    <div class="plan-list" id="p-days" aria-live="polite">${rows(true)}</div>
     <div class="sheet-actions"><button class="btn primary" id="p-add">Dodaj ${plan.length} ${plural(plan.length,"sesję","sesje","sesji")} do listy</button></div>`;
   openSheet(`Plan nauki: ${t.tytul}`, body, { onMount: root => {
-    $("#p-add", root).onclick = () => { closeSheet(); commit(`Dodano plan nauki (${plan.length})`, () => { let id = nextId(); for (const p of plan) tasks().push({ id: id++, ...p }); }); };
+    const toggle = $("#p-adapt", root);
+    toggle?.addEventListener("change", () => { $("#p-days", root).innerHTML = rows(toggle.checked); });
+    $("#p-add", root).onclick = () => {
+      const adapt = toggle?.checked ?? true;
+      closeSheet();
+      commit(`Dodano plan nauki (${plan.length})`, () => {
+        plan.forEach((session, i) => tasks().push({id: nextId(), ...session, termin: adapt ? fitted[i].date : session.termin}));
+      });
+    };
   }});
 }
 
@@ -1628,6 +1755,47 @@ function openDay(date){
   openSheet(longDate(date).replace(/^./, c => c.toUpperCase()), body, { onMount: root => {
     $("#d-add", root).onclick = () => openEditor(null, { termin: date });
     root.addEventListener("click", e => { if (e.target.closest("[data-act]")) setTimeout(() => { if (sheetOpen && !$("#e-title")) openDay(date); }, 560); });
+  }});
+}
+
+/* ---------- odciążenie pojedynczego dnia ---------- */
+function reliefOptions(){
+  const days = radar(14);
+  const options = [];
+  for (const [index, day] of days.slice(0, 7).entries()){
+    if (day.level !== "crunch") continue;
+    const canAccept = candidate => candidate.load + PRIO_W.niski < BUSY;
+    const earlier = days.slice(0, index).reverse().find(canAccept);
+    const target = earlier || days.slice(index + 1, index + 8).find(canAccept);
+    if (!target) continue;
+    for (const task of day.items){
+      if (task.termin !== day.date || task.priorytet !== "niski" || isExam(task) || studyParentId(task) !== null) continue;
+      options.push({id: task.id, title: task.tytul, from: day.date, to: target.date});
+    }
+  }
+  return options;
+}
+
+function openRelief(){
+  const options = reliefOptions();
+  if (!options.length){ toast("Brak propozycji dla obecnego planu."); return; }
+  const rows = options.map(option => `<label><input type="radio" name="relief-task" value="${option.id}" required>
+    <span><b>${esc(option.title)}</b><small>Obecny termin: ${shortDate(option.from)}<br>Proponowany termin: ${shortDate(option.to)} (${option.to < option.from ? "wcześniej" : "później"})</small></span></label>`).join("");
+  openSheet("Lżejszy dzień", `<p class="about">Po przeniesieniu jednej sprawy wybrany dzień nadal będzie lekki według radaru. Późniejszą datę wybierz tylko dla sprawy z elastycznym terminem.</p>
+    <form id="relief-form"><fieldset class="relief-choices"><legend>Którą sprawę chcesz przenieść?</legend>${rows}</fieldset>
+    <div class="sheet-actions"><button class="btn primary" type="submit">Zmień wybrany termin</button><button type="button" class="btn" data-close>Anuluj</button></div></form>`, {onMount: root => {
+    $("#relief-form", root).onsubmit = event => {
+      event.preventDefault();
+      const selected = $('input[name="relief-task"]:checked', root);
+      if (!selected) return;
+      const option = options.find(item => item.id === Number(selected.value));
+      const current = reliefOptions().find(item => item.id === option.id);
+      if (!current || current.from !== option.from || current.to !== option.to){
+        closeSheet(); render(); toast("Plan się zmienił. Sprawdź aktualne propozycje."); return;
+      }
+      closeSheet();
+      commit(`Nowy termin: ${shortDate(current.to)}`, () => { byId(current.id).termin = current.to; });
+    };
   }});
 }
 
@@ -1658,15 +1826,18 @@ function openTriage(){
         <div class="sheet-actions" style="margin-top:10px"><button class="btn ghost" data-t="skip">Pomiń</button></div>`;
       $$("[data-t]", box).forEach(b => b.onclick = () => {
         const k = b.dataset.t;
+        $$("[data-t]", box).forEach(button => { button.disabled = true; });
         const card = $("#tcard", box); card.style.transform = k === "done" ? "translateX(40px) rotate(2deg)" : k === "del" ? "translateX(-40px) rotate(-2deg)" : "translateY(-12px)"; card.style.opacity = "0";
         setTimeout(() => {
-          if (k === "done"){ setDone(t, true); actions.done++; }
-          else if (k === "today"){ t.termin = today(); actions.moved++; }
-          else if (k === "tomorrow"){ t.termin = addDays(today(),1); actions.moved++; }
-          else if (k === "week"){ t.termin = addDays(today(),7); actions.moved++; }
-          else if (k === "none"){ t.termin = null; actions.moved++; }
-          else if (k === "del"){ state.doc.zadania = tasks().filter(x => x.id !== t.id); actions.deleted++; }
-          if (k !== "skip"){ save(); render(); }
+          if (!box.isConnected || byId(t.id) !== t) return;
+          if (k !== "skip") commit("Zaktualizowano zaległość", () => {
+            if (k === "done"){ setDone(t, true); actions.done++; }
+            else if (k === "today"){ t.termin = today(); actions.moved++; }
+            else if (k === "tomorrow"){ t.termin = addDays(today(),1); actions.moved++; }
+            else if (k === "week"){ t.termin = addDays(today(),7); actions.moved++; }
+            else if (k === "none"){ t.termin = null; actions.moved++; }
+            else if (k === "del"){ removeTask(t.id); actions.deleted++; }
+          });
           i++; show();
         }, 180);
       });
@@ -1677,6 +1848,21 @@ function openTriage(){
 
 /* ---------- tryb skupienia (pomodoro) ---------- */
 const timer = { id:null, total:25*60, endAt:null, left:25*60, running:false, iv:null };
+function captureFocus(){
+  const {id, total, running} = timer;
+  const left = running ? Math.max(0, (timer.endAt - Date.now())/1000) : timer.left;
+  return {id, total, running, left};
+}
+function restoreFocus(focus){
+  clearInterval(timer.iv);
+  const values = focus || {id:null, total:timer.total, running:false, left:timer.total};
+  Object.assign(timer, values, {iv:null, endAt:null});
+  if (timer.running){
+    timer.endAt = Date.now() + timer.left*1000;
+    timer.iv = setInterval(timerTick, 500);
+  }
+  timerTick();
+}
 function fmtT(s){ s = Math.max(0, Math.round(s)); return `${pad(Math.floor(s/60))}:${pad(s%60)}`; }
 function timerTick(){
   if (timer.running){ timer.left = (timer.endAt - Date.now())/1000; if (timer.left <= 0) return timerDone(); }
@@ -1687,7 +1873,7 @@ function timerTick(){
   if (ring){ const C = 2*Math.PI*100; ring.style.strokeDashoffset = C * (1 - timer.left/timer.total); $("#ft-time").textContent = fmtT(timer.left); $("#ft-start").textContent = timer.running ? "Pauza" : (timer.left < timer.total ? "Wznów" : "Start"); }
 }
 function logFocus(min){
-  if (!timer.id || min < 1) return;
+  if (!byId(timer.id) || min < 1) return;
   state.meta.focus.byTask[timer.id] = (state.meta.focus.byTask[timer.id]||0) + min;
   state.meta.focus.byDay[today()] = (state.meta.focus.byDay[today()]||0) + min;
   save();
@@ -1705,8 +1891,11 @@ function timerDone(){
 }
 function openFocus(id){
   const t = byId(id); if (!t) return;
-  if (timer.id !== id && timer.running){ const spent = Math.round((timer.total - timer.left)/60); logFocus(spent); timer.running = false; }
-  if (timer.id !== id){ timer.id = id; timer.left = timer.total; }
+  if (timer.id !== id){
+    logFocus(Math.round((timer.total - captureFocus().left)/60));
+    restoreFocus(null);
+    timer.id = id;
+  }
   const C = 2*Math.PI*100;
   openSheet("Skupienie", `<p class="timer-task">${esc(t.tytul)}</p>
     <div class="timer"><svg viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="var(--block)" stroke-width="10"/><circle id="ft-ring" cx="110" cy="110" r="100" fill="none" stroke="var(--ink)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="0" style="transition:stroke-dashoffset .9s linear"/></svg>
@@ -1720,12 +1909,15 @@ function openFocus(id){
       else { timer.running = true; timer.endAt = Date.now() + timer.left*1000; if (!timer.iv) timer.iv = setInterval(timerTick, 500); }
       timerTick();
     };
-    $("#ft-reset", root).onclick = () => { if (timer.running) logFocus(Math.round((timer.total - (timer.endAt-Date.now())/1000)/60)); timer.running = false; clearInterval(timer.iv); timer.iv = null; timer.left = timer.total; timerTick(); };
+    $("#ft-reset", root).onclick = () => {
+      logFocus(Math.round((timer.total - captureFocus().left)/60));
+      restoreFocus({id, total:timer.total, left:timer.total, running:false});
+    };
     $$("[data-m]", root).forEach(b => b.onclick = () => { if (timer.running) return; timer.total = timer.left = +b.dataset.m*60; $$("[data-m]", root).forEach(x => x.setAttribute("aria-pressed", x === b)); timerTick(); });
     timerTick();
   }, onClose: () => setTimeout(timerTick, 10) });
 }
-$("#timerPill").addEventListener("click", () => timer.id && openFocus(timer.id));
+$("#timerPill").addEventListener("click", () => { if (timer.id !== null) openFocus(timer.id); });
 document.addEventListener("visibilitychange", timerTick);
 
 /* ---------- ustawienia: import / eksport ---------- */
@@ -1749,8 +1941,8 @@ function openSettings(){
     $("#s-export", root).onclick = () => { exportFile(); closeSheet(); };
     $("#s-share", root)?.addEventListener("click", async () => { try { await navigator.share({ files:[new File([serializeDoc(state.doc)], "zadania.json", {type:"application/json"})], title:"zadania.json" }); } catch(e){} });
     $("#s-copy", root).onclick = async () => { try { await navigator.clipboard.writeText(serializeDoc(state.doc)); toast("Skopiowano JSON"); } catch(e){ toast("Nie udało się skopiować. Użyj zapisu do pliku."); } };
-    $("#s-sample", root).onclick = () => { closeSheet(); commit("Wczytano przykładowe zadania", () => { state.doc = parseDoc(JSON.stringify(SAMPLE)).doc; }); };
-    $("#s-clear", root).onclick = () => { closeSheet(); commit(`Usunięto ${nTasks(tasks().length)}`, () => { state.doc.zadania = []; state.meta.doneAt = {}; }); };
+    $("#s-sample", root).onclick = () => { closeSheet(); commit("Wczytano przykładowe zadania", () => replaceDocument(parseDoc(JSON.stringify(SAMPLE)).doc)); };
+    $("#s-clear", root).onclick = () => { closeSheet(); commit(`Usunięto ${nTasks(tasks().length)}`, () => replaceDocument({...state.doc, zadania:[]})); };
   }});
 }
 function exportFile(){
@@ -1781,8 +1973,8 @@ async function importFile(file){
   const apply = mode => {
     closeSheet();
     commit(mode === "replace" ? `Wczytano ${nTasks(doc.zadania.length)} z pliku` : `Dołączono ${nTasks(doc.zadania.length)}`, () => {
-      if (mode === "replace"){ state.doc = doc; state.meta.doneAt = {}; }
-      else { let id = nextId(); for (const t of doc.zadania){ if (byId(t.id)) t.id = id++; else id = Math.max(id, t.id+1); tasks().push(t); } }
+      if (mode === "replace") replaceDocument(doc);
+      else mergeDocument(doc);
     });
   };
   if (!tasks().length && !warn.length) return apply("replace");
@@ -1812,10 +2004,25 @@ function toast(msg, action, actionLabel="Cofnij"){
 }
 
 /* ---------- start ---------- */
-load();
+function startDemo(){
+  const entries = [
+    ["Kolokwium z sieci", "Rozdziały 3–8", 7, "wysoki", ["studia"]],
+    ["Oddać sprawozdanie z laboratorium", "Wgraj raport przed zajęciami.", 4, "wysoki", ["lab"]],
+    ["Pokazać prototyp na zajęciach", "Przygotuj trzy ekrany aplikacji.", 4, "wysoki", ["projekt"]],
+    ["Uporządkować notatki", "Wybierz dzień, kiedy masz wolne popołudnie.", 4, "niski", ["studia"]]
+  ];
+  const zadania = entries.map(([tytul, opis, offset, priorytet, tagi], i) => ({
+    id:i+1, tytul, opis, termin:addDays(today(), offset), priorytet, wykonane:false, tagi
+  }));
+  state = {doc:{wersja:1, zadania}, meta:emptyMeta()};
+  $("#demoBar").hidden = false;
+}
+if (DEMO) startDemo(); else load();
 render();
 setInterval(() => { const d = today(); if (d !== window._lastDay){ window._lastDay = d; render(); } }, 60000); window._lastDay = today();
-if ("serviceWorker" in navigator && location.protocol === "https:") { try { navigator.serviceWorker.register("sw.js").catch(() => {}); } catch(e){} }
+if ("serviceWorker" in navigator && window.isSecureContext && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
 </script>
 </body>
 </html>
